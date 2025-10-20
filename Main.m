@@ -2,8 +2,8 @@
 %% Load image
 clc
 
-% filename = '2024021_1.1.tif';
-filename = 'total buffers.tif';
+filename = '2024021_1.1.tif';
+% filename = 'total buffers.tif';
 disp(['Opening:' newline filename newline 'in progress ...'])
 
 Tiff_obj = Tiff(filename);
@@ -146,7 +146,58 @@ Data_sparse = sparse_data(Data, Clasters, Part_size);
 
 
 
+%% Image save
 
+% TODO: add pixed data type control
+
+% Image_file_Data(:,:,1) = single(Image_Data_output_Forest);
+% Image_file_Data(:,:,2) = 2;
+% Image_file_Data(:,:,3) = 3;
+% Image_file_Data(:,:,4) = 4;
+% Image_file_Data(:,:,5) = 5;
+% Image_file_Data(:,:,6) = 6;
+% Image_file_Data(:,:,7) = 7;
+% Image_file_Data(:,:,8) = 8;
+% Image_file_Data(:,:,9) = 9;
+
+
+Image_file_Data(:,:,1) = single(Image_c);
+folder_output = '.';
+filename_output = 'TEST_OUTPUT.TIF';
+file_addr = [folder_output '/' filename_output];
+
+
+numrows = size(Image_file_Data, 1);
+numcols = size(Image_file_Data, 2);
+SamplesPerPixel = size(Image_file_Data, 3);
+
+Tiff_obj2 = Tiff(file_addr, 'w');
+disp('Tiff file created')
+
+setTag(Tiff_obj2, "Photometric",Tiff.Photometric.LinearRaw)
+setTag(Tiff_obj2, "Compression",Tiff.Compression.None)
+
+setTag(Tiff_obj2, "BitsPerSample", 32)
+setTag(Tiff_obj2, "SamplesPerPixel", SamplesPerPixel)
+% setTag(Tiff_obj2, "SampleFormat", Tiff.SampleFormat.UInt)
+setTag(Tiff_obj2, "SampleFormat", Tiff.SampleFormat.IEEEFP)
+setTag(Tiff_obj2, "ExtraSamples", Tiff.ExtraSamples.Unspecified)
+setTag(Tiff_obj2, "ImageLength", numrows)
+setTag(Tiff_obj2, "ImageWidth", numcols)
+setTag(Tiff_obj2, "TileLength", 32)
+setTag(Tiff_obj2, "TileWidth", 32)
+setTag(Tiff_obj2, "PlanarConfiguration", Tiff.PlanarConfiguration.Chunky)
+
+try
+    write(Tiff_obj2, Image_file_Data);
+    disp('Tiff file writeing end')
+    
+    close(Tiff_obj2)
+    disp('Tiff file closed')
+catch e
+    close(Tiff_obj2)
+    rethrow(e);
+end
 
 
 
