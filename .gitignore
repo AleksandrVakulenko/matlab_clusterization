@@ -1,2 +1,5 @@
 *.tif
 *.asv
+temp/
+save.mat
+save2.mat

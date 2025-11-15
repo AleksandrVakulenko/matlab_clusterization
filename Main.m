@@ -1,103 +1,165 @@
 
+%% Find all names
+clc
+
+Folder = 'Data';
+Tif_files = find_tif_files(Folder);
+clearvars Folder
+
 %% Load image
+% Full image in col 1 of Images cell
 clc
 
-filename = '2024021_1.1.tif';
-% filename = 'total buffers.tif';
-disp(['Opening:' newline filename newline 'in progress ...'])
+N = numel(Tif_files);
+Images = cell(N, 1);
+for i = 1:N
 
-Tiff_obj = Tiff(filename);
-
-Image_Data = read(Tiff_obj);
-
-disp('File ready.');
-
-% clearvars Tiff_obj filename
-
-
-%% Create circle stencil
-
-Normalize = false;
-
-clc
-Stencil = false(size(Image_Data, [1,2]));
-for i = 1:size(Image_Data, 3)
-
-    Layer = Image_Data(:, :, i);
-
-    range = Layer ~= 0;
-    M = mean(Layer(range));
-    Layer(~range) = M;
-    if Normalize
-        Image_Data(:, :, i) = Layer/M;
-    else
-        Image_Data(:, :, i) = Layer;
-    end
-    Stencil(range) = true;
+filename = Tif_files(i).full_path;
+[Image_Data, Tiff_obj] = load_image(filename);
+Images{i} = Image_Data;
 
 end
 
-clearvars i Layer M range
+clearvars i N filename Image_Data Tiff_obj
+clearvars Tif_files
 
-imagesc(Stencil)
-axis equal
-
-%% Image part
-
-range_y = 6392:6645;
-range_x = 1623:1945;
-Image_Data = Image_Data(range_y, range_x, :);
-Stencil = Stencil(range_y, range_x);
-
-%% Layers preview
+%% Create stencils
+% Stencil in col 2 of Images cell
 clc
 
-figure('Position', [510 100 768 550 ])
-for i = 1:12
-    subplot(3, 4, i);
-    imagesc(Image_Data(:, :, i));
+N = size(Images, 1);
+for i = 1:N
+    Image_Data = Images{i, 1};
+    Stencil = create_stencil(Image_Data);
+    Images{i, 2} = Stencil;
+end
+
+clearvars i N Image_Data Stencil
+
+
+%% Find mean of all layers and Normalize
+
+Mean_of_layer = find_mean_of_all_layers(Images);
+Images = Normalize_data(Images, Mean_of_layer);
+
+clearvars Mean_of_layer
+
+
+%% Layers preview (12 layers)
+% clc
+% 
+Image_num = 6;
+Draw_image_layers(Images, Image_num);
+clearvars Image_num
+
+
+%% Data reshape and cut by stencil
+% Data_sparse in col 3 of Images cell
+% Rand_index in col 4 of Images cell
+
+N = size(Images, 1);
+for i = 1:N
+    disp([num2str(i) '/' num2str(N)]);
+    Image_Data = Images{i, 1};
+    Stencil = Images{i, 2};
+    [Data, Initial_indexes] = extract_data_from_image(Image_Data, Stencil);
+%     Images{i, 3} = Data;
+%     Images{i, 4} = Initial_indexes;
+    Z = create_linkage(Data);
+    Clasters = cluster(Z, maxclust=20);
+
+    % Sparse data
+    Part_size = 0.1;
+    [Data_sparse, Rand_index] = sparse_data(Data, Clasters, Initial_indexes, Part_size);
+    Images{i, 3} = Data_sparse;
+    Images{i, 4} = Rand_index;
+
+end
+clearvars N i Image_Data Data Stencil Initial_indexes
+
+
+
+%%
+% Original images in col 1 of Images2 cell
+% Claster numbers in col 2 of Images2 cell
+% Initial_indexes in col 3 of Images2 cell
+% Rand_index in col 4 of Images2 cell
+clc
+
+N = size(Images, 1);
+Images2 = Images;
+Images2(:, 4) = [];
+for i = 1:N
+    disp([num2str(i) '/' num2str(N)]);
+    Image_Data = Images{i, 1};
+    Stencil = Images{i, 2};
+    [Data, Initial_indexes] = extract_data_from_image(Image_Data, Stencil);
+    Data_size = size(Data, 1);
+    Common_data = create_common_data(Images(:, 3), i);
+    Data_union = [Data; Common_data];
+
+    Linkage_data = create_linkage(Data_union, false);
+%     Clasters = cluster(Linkage_data, "maxclust", 10);
+    Clasters = cluster(Linkage_data, "cutoff", 0.1);
+    disp(['Unique clasters ' numel(numel(unique(Clasters))) ' ----']);
+    Clasters = Clasters(1:Data_size);
+
+    Images2{i, 2} = Clasters;
+    Images2{i, 3} = Initial_indexes;
+    Images2{i, 4} = Linkage_data;
+
+    dendrogram(Linkage_data, 360);
+    drawnow
+end
+
+
+
+
+
+
+%%
+
+Image_num = 17;
+
+Image_Data = Images{Image_num, 1};
+Stencil = Images{Image_num, 2};
+
+LN = size(Image_Data, 3);
+if LN > 12
+    error("more than 12 layers on image")
+end
+
+figure('Position', [510 100 768 550])
+for iL = 1:LN
+% i = 5
+    Layer = Image_Data(:, :, iL);
+    M = mean(Layer(Stencil), 'all');
+    Layer(~Stencil) = M;
+
+    Ind = Images{Image_num, 4};
+    Layer(Ind) = 0;
+
+    subplot(3, 4, iL);
+    imagesc(Layer);
     axis equal
     colormap gray
     set(gca, 'YDir', 'normal')
-    title(['Layer ' num2str(i)])
+    title(['Layer ' num2str(iL)])
 end
 
-clearvars i
-
-%% Data reshape and cut by stencil
-
-H = size(Image_Data, 1);
-K = size(Image_Data, 2);
-L = size(Image_Data, 3);
-Data = reshape(Image_Data, [H*K L]);
-Initial_sz1 = H;
-Initial_sz2 = K;
-
-H = size(Stencil, 1);
-K = size(Stencil, 2);
-L = 1;
-Stencil_linear = reshape(Stencil, [H*K, L]);
-
-Data = Data(Stencil_linear, :);
-
-Initial_indexes = find(Stencil);
-
-clearvars H K L Stencil_linear
 
 
-%% Clusterization
-clc
-N = size(Data, 1);
-check_mem_clusterizing(N);
 
-disp("Linkage in progress ...")
-tic
-Z = linkage(Data, "ward");
-Time = toc;
-disp(['Linkage ended in ' num2str(Time, '%0.1f') ' s'])
-%%
-Clasters = cluster(Z, maxclust=20);
-toc
+
+
+
+
+
+
+
+
+
+
 
 
 %% Claster sort
